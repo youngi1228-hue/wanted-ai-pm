@@ -1,0 +1,8 @@
+6/24 진행상황
+Python+Streamlit(로컬 가상)
+스트림릿에 입력한 개인 이력서 정보를 토대로
+wanted 사이트에서 AI PM 관련 링크 수집 후 연관 점수가 높은 순으로 맞춤 공고 추천 페이지 만듦.
+어제 만든 커리어 에이전트 MVP 디자인 수정(깔끔하게, URL 링크 연결 등)
+
+Streamlit 대신 NiceGUI로 변경하여 커리어 에이전트 MVP 구성해 봄.(Streamlit에 비해 질이 떨어짐.)
+Streamlit Community Cloud와 Activepieces Cloud를 이용해서 만들어 보려고 함.
