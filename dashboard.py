@@ -37,8 +37,15 @@ def normalize_url(value):
     return url
 
 
-def get_config_value(name, default=""):
-    return os.getenv(name, default)
+def get_secret(name, default=""):
+    value = os.getenv(name)
+    if value:
+        return value
+
+    try:
+        return st.secrets.get(name, default)
+    except Exception:
+        return default
 
 
 def is_valid_email(email):
@@ -110,8 +117,9 @@ def build_jobs_email_html(jobs, conditions, search_time):
 
 
 def send_jobs_email(recipient_email, jobs, conditions, search_time):
-    sender_email = get_config_value("SMTP_EMAIL").strip()
-    app_password = re.sub(r"\s+", "", get_config_value("SMTP_APP_PASSWORD"))
+    sender_email = get_secret("SMTP_EMAIL").strip()
+    smtp_app_password = get_secret("SMTP_APP_PASSWORD").replace(" ", "")
+    app_password = re.sub(r"\s+", "", smtp_app_password)
 
     if not sender_email or not app_password:
         raise ValueError("이메일 발송 설정이 완료되지 않았습니다.")
@@ -442,7 +450,7 @@ def render_job_results(response_json, desired_job, desired_location, minimum_sal
 st.title("커리어 에이전트")
 st.header("맞춤 공고 추천")
 
-webhook_default = get_config_value("ACTIVEPIECES_WEBHOOK_URL")
+webhook_default = get_secret("ACTIVEPIECES_WEBHOOK_URL")
 
 if "activepieces_response_json" not in st.session_state:
     st.session_state["activepieces_response_json"] = None
@@ -581,8 +589,9 @@ if displayed_jobs:
         disabled=st.session_state.get("email_sending", False),
     ):
         email_to = st.session_state.get("recipient_email", "").strip()
-        smtp_email = get_config_value("SMTP_EMAIL").strip()
-        smtp_password = re.sub(r"\s+", "", get_config_value("SMTP_APP_PASSWORD"))
+        smtp_email = get_secret("SMTP_EMAIL").strip()
+        smtp_app_password = get_secret("SMTP_APP_PASSWORD").replace(" ", "")
+        smtp_password = re.sub(r"\s+", "", smtp_app_password)
 
         if not is_valid_email(email_to):
             st.warning("올바른 이메일 주소를 입력해주세요.")
