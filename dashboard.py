@@ -59,8 +59,12 @@ def display_value(job, field):
 
 def build_jobs_email_html(jobs, conditions, search_time):
     desired_job = clean_text(conditions.get("desired_job", "")) or "입력 없음"
-    desired_location = clean_text(conditions.get("desired_location", "")) or "입력 없음"
-    minimum_salary = clean_text(conditions.get("minimum_salary", "")) or "입력 없음"
+    desired_location = clean_text(
+        conditions.get("location", conditions.get("desired_location", ""))
+    ) or "입력 없음"
+    minimum_salary = clean_text(
+        conditions.get("min_salary", conditions.get("minimum_salary", ""))
+    ) or "입력 없음"
 
     cards = []
     for index, job in enumerate(jobs, start=1):
@@ -125,9 +129,12 @@ def send_jobs_email(recipient_email, jobs, conditions, search_time):
         raise ValueError("이메일 발송 설정이 완료되지 않았습니다.")
 
     desired_job = clean_text(conditions.get("desired_job", "")) or "희망 직무"
+    desired_location = clean_text(
+        conditions.get("location", conditions.get("desired_location", ""))
+    ) or "희망 지역"
 
     message = MIMEMultipart("alternative")
-    message["Subject"] = f"[맞춤 공고 추천] {desired_job} 채용공고 결과"
+    message["Subject"] = f"[맞춤 공고 추천] {desired_job} / {desired_location} 채용공고 결과"
     message["From"] = sender_email
     message["To"] = recipient_email
     message.attach(MIMEText("맞춤 채용공고 추천 결과를 HTML 이메일로 확인해주세요.", "plain", "utf-8"))
@@ -151,11 +158,10 @@ def send_to_activepieces(webhook_url, resume_pdf, conditions):
         }
 
     data = {
-        "conditions": json.dumps(conditions, ensure_ascii=False),
+        "desired_job": str(conditions["desired_job"]),
+        "location": str(conditions["location"]),
+        "min_salary": str(conditions["min_salary"]),
     }
-
-    for key, value in conditions.items():
-        data[key] = str(value)
 
     response = requests.post(
         webhook_url,
@@ -461,8 +467,8 @@ if "activepieces_status_code" not in st.session_state:
 if "activepieces_conditions" not in st.session_state:
     st.session_state["activepieces_conditions"] = {
         "desired_job": "",
-        "desired_location": "",
-        "minimum_salary": "",
+        "location": "",
+        "min_salary": "",
     }
 
 if "activepieces_search_time" not in st.session_state:
@@ -494,7 +500,7 @@ with st.form("activepieces_webhook_form"):
     desired_job = st.text_input(
         "희망 직무",
         value="",
-        placeholder="예: AI PM, 서비스 기획, Product Manager",
+        placeholder="예: AI PM, 데이터 분석가, 전기설계, 디지털튜터",
         key="activepieces_desired_job",
     )
     desired_location = st.text_input(
@@ -519,51 +525,58 @@ if submit_activepieces:
     if not webhook_default.strip():
         st.error(".env에 ACTIVEPIECES_WEBHOOK_URL을 설정해주세요.")
     else:
-        conditions = {
-            "desired_job": desired_job.strip(),
-            "desired_location": desired_location.strip(),
-            "minimum_salary": minimum_salary.strip(),
-        }
+        desired_job = desired_job.strip()
+        desired_location = desired_location.strip()
+        minimum_salary = minimum_salary.strip()
 
-        with st.spinner("Activepieces Webhook으로 조회 조건을 전송 중입니다..."):
-            try:
-                response_payload = send_to_activepieces(
-                    webhook_default.strip(),
-                    resume_pdf,
-                    conditions,
-                )
-                response_json = response_payload["json"]
-                st.session_state["activepieces_status_code"] = response_payload["status_code"]
-                st.session_state["activepieces_response_json"] = response_json
-                st.session_state["activepieces_conditions"] = conditions
-                st.session_state["activepieces_search_time"] = datetime.now().strftime(
-                    "%Y-%m-%d %H:%M:%S"
-                )
+        if not desired_job or not desired_location:
+            st.warning("희망 직무와 희망 지역을 입력해주세요.")
+        else:
+            conditions = {
+                "desired_job": desired_job,
+                "location": desired_location,
+                "min_salary": minimum_salary,
+            }
 
-                _, jobs = extract_jobs(response_json)
-                if jobs:
-                    st.success("채용공고 데이터를 불러왔습니다.")
-            except requests.Timeout as exc:
-                st.session_state["activepieces_status_code"] = None
-                st.session_state["activepieces_response_json"] = None
-                st.error(f"Activepieces 요청 시간이 초과되었습니다: {exc}")
-            except requests.HTTPError as exc:
-                st.session_state["activepieces_response_json"] = None
-                response = exc.response
-                status_code = response.status_code if response is not None else "알 수 없음"
-                st.session_state["activepieces_status_code"] = status_code
-                response_text = response.text if response is not None else ""
-                st.error(f"Activepieces HTTP 오류가 발생했습니다. 상태 코드: {status_code}")
-                if response_text:
-                    st.code(response_text)
-            except ValueError as exc:
-                st.session_state["activepieces_status_code"] = None
-                st.session_state["activepieces_response_json"] = None
-                st.error(f"Activepieces 응답을 JSON으로 해석하지 못했습니다: {exc}")
-            except requests.RequestException as exc:
-                st.session_state["activepieces_status_code"] = None
-                st.session_state["activepieces_response_json"] = None
-                st.error(f"Activepieces 요청에 실패했습니다: {exc}")
+            with st.spinner("Activepieces Webhook으로 조회 조건을 전송 중입니다..."):
+                try:
+                    response_payload = send_to_activepieces(
+                        webhook_default.strip(),
+                        resume_pdf,
+                        conditions,
+                    )
+                    response_json = response_payload["json"]
+                    st.session_state["activepieces_status_code"] = response_payload["status_code"]
+                    st.session_state["activepieces_response_json"] = response_json
+                    st.session_state["activepieces_conditions"] = conditions
+                    st.session_state["activepieces_search_time"] = datetime.now().strftime(
+                        "%Y-%m-%d %H:%M:%S"
+                    )
+
+                    _, jobs = extract_jobs(response_json)
+                    if jobs:
+                        st.success("채용공고 데이터를 불러왔습니다.")
+                except requests.Timeout as exc:
+                    st.session_state["activepieces_status_code"] = None
+                    st.session_state["activepieces_response_json"] = None
+                    st.error(f"Activepieces 요청 시간이 초과되었습니다: {exc}")
+                except requests.HTTPError as exc:
+                    st.session_state["activepieces_response_json"] = None
+                    response = exc.response
+                    status_code = response.status_code if response is not None else "알 수 없음"
+                    st.session_state["activepieces_status_code"] = status_code
+                    response_text = response.text if response is not None else ""
+                    st.error(f"Activepieces HTTP 오류가 발생했습니다. 상태 코드: {status_code}")
+                    if response_text:
+                        st.code(response_text)
+                except ValueError as exc:
+                    st.session_state["activepieces_status_code"] = None
+                    st.session_state["activepieces_response_json"] = None
+                    st.error(f"Activepieces 응답을 JSON으로 해석하지 못했습니다: {exc}")
+                except requests.RequestException as exc:
+                    st.session_state["activepieces_status_code"] = None
+                    st.session_state["activepieces_response_json"] = None
+                    st.error(f"Activepieces 요청에 실패했습니다: {exc}")
 
 response_json = st.session_state["activepieces_response_json"]
 if response_json is not None:
@@ -571,8 +584,8 @@ if response_json is not None:
     raw_jobs, jobs = render_job_results(
         response_json,
         saved_conditions["desired_job"],
-        saved_conditions["desired_location"],
-        saved_conditions["minimum_salary"],
+        saved_conditions.get("location", saved_conditions.get("desired_location", "")),
+        saved_conditions.get("min_salary", saved_conditions.get("minimum_salary", "")),
     )
     render_debug_expander(
         st.session_state["activepieces_status_code"],
